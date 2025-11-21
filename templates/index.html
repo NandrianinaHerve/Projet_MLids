@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IDS Complet avec Machine Learning</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .log-info { color: #3b82f6; }
+        .log-success { color: #10b981; }
+        .log-warning { color: #f59e0b; }
+        .log-error { color: #ef4444; }
+        .log-alert { color: #dc2626; font-weight: bold; }
+        .log-traffic { color: #8b5cf6; }
+        .console { font-family: 'Courier New', monospace; font-size: 12px; }
+        .ml-badge { background: linear-gradient(45deg, #8b5cf6, #3b82f6); }
+        .custom-notification {
+    min-width: 300px;
+    max-width: 500px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    border-left: 4px solid;
+}
+
+.custom-notification.success {
+    border-left-color: #10b981;
+}
+
+.custom-notification.error {
+    border-left-color: #ef4444;
+}
+
+.custom-notification.warning {
+    border-left-color: #f59e0b;
+}
+
+.custom-notification.info {
+    border-left-color: #3b82f6;
+}
+
+/* Animation de pulse pour les boutons */
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+.pulse-animation {
+    animation: pulse 0.5s ease-in-out;
+}
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto p-4">
+        <!-- En-tête -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">
+                <i class="fas fa-shield-alt text-blue-500"></i>
+                Système IDS avec Machine Learning
+            </h1>
+            <p class="text-gray-600">Détection intelligente des menaces réseau</p>
+            <div class="mt-2 flex flex-wrap gap-2">
+                <span class="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded">Machine Learning</span>
+                <span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">Détection Temps Réel</span>
+                <span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">Analyse Complète</span>
+            </div>
+        </div>
+
+<!-- Les 6 boutons dans l'ordre -->
+<div class="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6">
+    <button onclick="startCapture()" class="bg-green-500 hover:bg-green-600 text-white p-3 rounded-lg flex items-center justify-center gap-2 transition-all">
+        <i class="fas fa-play"></i> Capture
+    </button>
+    <button onclick="stopCapture()" class="bg-red-500 hover:bg-red-600 text-white p-3 rounded-lg flex items-center justify-center gap-2 transition-all">
+        <i class="fas fa-stop"></i> Arrêter
+    </button>
+    <button onclick="startDetection()" class="bg-blue-500 hover:bg-blue-600 text-white p-3 rounded-lg flex items-center justify-center gap-2 transition-all">
+        <i class="fas fa-brain"></i> Détection ML
+    </button>
+    <button onclick="stopDetection()" class="bg-orange-500 hover:bg-orange-600 text-white p-3 rounded-lg flex items-center justify-center gap-2 transition-all">
+        <i class="fas fa-pause"></i> Arrêter ML
+    </button>
+    <button onclick="trainModel()" class="bg-purple-500 hover:bg-purple-600 text-white p-3 rounded-lg flex items-center justify-center gap-2 transition-all">
+        <i class="fas fa-robot"></i> Entraîner ML
+    </button>
+    <button onclick="clearLogs()" class="bg-gray-500 hover:bg-gray-600 text-white p-3 rounded-lg flex items-center justify-center gap-2 transition-all">
+        <i class="fas fa-trash"></i> Effacer
+    </button>
+</div>
+
+        <!-- Statistiques -->
+        <div id="stats" class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <!-- Rempli dynamiquement -->
+        </div>
+
+        <!-- Informations ML -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">
+                <i class="fas fa-brain text-purple-500"></i>
+                Informations Machine Learning
+            </h2>
+            <div id="ml-info" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="text-center p-4 bg-purple-50 rounded-lg">
+                    <div class="text-2xl font-bold text-purple-600" id="ml-status">Non entraîné</div>
+                    <div class="text-gray-600">Statut Modèle</div>
+                </div>
+                <div class="text-center p-4 bg-green-50 rounded-lg">
+                    <div class="text-2xl font-bold text-green-600" id="ml-accuracy">0%</div>
+                    <div class="text-gray-600">Accuracy</div>
+                </div>
+                <div class="text-center p-4 bg-blue-50 rounded-lg">
+                    <div class="text-2xl font-bold text-blue-600" id="ml-features">0</div>
+                    <div class="text-gray-600">Features</div>
+                </div>
+                <div class="text-center p-4 bg-orange-50 rounded-lg">
+                    <div class="text-xl font-bold text-orange-600" id="ml-algorithm">Aucun</div>
+                    <div class="text-gray-600">Algorithme</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Grille principale -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Colonne de gauche -->
+            <div class="space-y-6">
+                <!-- Console -->
+                <div class="bg-white rounded-lg shadow-md">
+                    <div class="bg-gray-800 text-white p-3 rounded-t-lg flex justify-between items-center">
+                        <span><i class="fas fa-terminal"></i> Console ML</span>
+                        <span class="text-sm" id="console-count">0 messages</span>
+                    </div>
+                    <div id="console" class="h-96 overflow-y-auto p-4 console bg-black text-green-400">
+                        <div class="text-green-400">🚀 Système IDS ML démarré...</div>
+                    </div>
+                </div>
+
+                <!-- Traffic Réseau -->
+                <div class="bg-white rounded-lg shadow-md">
+                    <div class="bg-blue-500 text-white p-3 rounded-t-lg">
+                        <span><i class="fas fa-network-wired"></i> Traffic Réseau</span>
+                    </div>
+                    <div id="traffic" class="h-64 overflow-y-auto p-4">
+                        <div class="text-gray-500 text-center py-4">Aucun trafic</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Colonne de droite -->
+            <div class="space-y-6">
+                <!-- Alertes -->
+                <div class="bg-white rounded-lg shadow-md">
+                    <div class="bg-red-500 text-white p-3 rounded-t-lg flex justify-between items-center">
+                        <span><i class="fas fa-exclamation-triangle"></i> Alertes de Sécurité</span>
+                        <span class="text-sm" id="alerts-count">0 alertes</span>
+                    </div>
+                    <div id="alerts" class="h-64 overflow-y-auto p-4">
+                        <div class="text-gray-500 text-center py-4">Aucune alerte</div>
+                    </div>
+                </div>
+
+                <!-- Sites Non Sécurisés -->
+                <div class="bg-white rounded-lg shadow-md">
+                    <div class="bg-yellow-500 text-white p-3 rounded-t-lg flex justify-between items-center">
+                        <span><i class="fas fa-unlock"></i> Sites Non Sécurisés</span>
+                        <span class="text-sm" id="insecure-count">0 sites</span>
+                    </div>
+                    <div id="insecure-sites" class="h-64 overflow-y-auto p-4">
+                        <div class="text-gray-500 text-center py-4">Aucun site non sécurisé</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Fonctions de contrôle
+        async function startCapture() {
+            try {
+                await fetch('/api/control/start_capture', { method: 'POST' });
+                console.log('Capture démarrée');
+            } catch (error) {
+                console.error('Erreur:', error);
+            }
+        }
+
+        async function stopCapture() {
+            try {
+                await fetch('/api/control/stop_capture', { method: 'POST' });
+                console.log('Capture arrêtée');
+            } catch (error) {
+                console.error('Erreur:', error);
+            }
+        }
+
+        async function startDetection() {
+            try {
+                await fetch('/api/control/start_detection', { method: 'POST' });
+                console.log('Détection ML activée');
+            } catch (error) {
+                console.error('Erreur:', error);
+            }
+        }
+
+        async function trainModel() {
+            try {
+                const response = await fetch('/api/control/train_model', { method: 'POST' });
+                const data = await response.json();
+                if (data.status === 'success') {
+                    console.log('Modèle entraîné:', data.message);
+                    setTimeout(updateData, 2000);
+                }
+            } catch (error) {
+                console.error('Erreur entraînement:', error);
+            }
+        }
+
+       async function clearLogs() {
+    try {
+        showNotification('Effacement en cours...', 'info');
+        
+        const response = await fetch('/api/control/clear_logs', { method: 'POST' });
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            console.log('Logs et alertes effacés:', data.message);
+            
+            // 🚨 FORCER la mise à jour immédiate de toutes les sections
+            setTimeout(() => {
+                updateData();
+                
+                // Réinitialiser manuellement l'affichage pour un feedback immédiat
+                document.getElementById('alerts').innerHTML = '<div class="text-gray-500 text-center py-4">Aucune alerte</div>';
+                document.getElementById('alerts-count').textContent = '0 alertes';
+                document.getElementById('console').innerHTML = '<div class="text-green-400">🗑️ Logs effacés</div>';
+                document.getElementById('console-count').textContent = '0 messages';
+                document.getElementById('traffic').innerHTML = '<div class="text-gray-500 text-center py-4">Aucun trafic</div>';
+                document.getElementById('insecure-sites').innerHTML = '<div class="text-gray-500 text-center py-4">Aucun site non sécurisé</div>';
+                document.getElementById('insecure-count').textContent = '0 sites';
+                
+                // Mettre à jour les statistiques
+                document.getElementById('stats').innerHTML = `
+                    <div class="bg-white p-4 rounded-lg shadow text-center">
+                        <div class="text-2xl font-bold text-blue-600">0</div>
+                        <div class="text-gray-600">Paquets</div>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow text-center">
+                        <div class="text-2xl font-bold text-red-600">0</div>
+                        <div class="text-gray-600">Alertes</div>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow text-center">
+                        <div class="text-2xl font-bold text-green-600">0%</div>
+                        <div class="text-gray-600">Taux Détection</div>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg shadow text-center">
+                        <div class="text-xl font-bold text-red-600">INACTIF</div>
+                        <div class="text-gray-600">Détection ML</div>
+                        <div class="text-xs text-gray-500 mt-1">Prédictions: 0</div>
+                    </div>
+                `;
+            }, 100);
+            
+            showNotification('Tous les logs et alertes ont été effacés!', 'success');
+        } else {
+            showNotification('Erreur lors de l\'effacement', 'error');
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+        showNotification('Erreur de connexion au serveur', 'error');
+    }
+}
+
+// Fonction de notification améliorée
+function showNotification(message, type) {
+    // Supprimer les notifications existantes
+    const existingNotifications = document.querySelectorAll('.custom-notification');
+    existingNotifications.forEach(notif => notif.remove());
+    
+    // Créer une nouvelle notification
+    const notification = document.createElement('div');
+    notification.className = `custom-notification fixed top-4 right-4 p-4 rounded-lg shadow-lg text-white z-50 transform transition-transform duration-300 ${
+        type === 'success' ? 'bg-green-500' : 
+        type === 'error' ? 'bg-red-500' : 
+        type === 'info' ? 'bg-blue-500' : 'bg-gray-500'
+    }`;
+    notification.innerHTML = `
+        <div class="flex items-center gap-2">
+            <i class="fas fa-${
+                type === 'success' ? 'check-circle' : 
+                type === 'error' ? 'exclamation-triangle' : 
+                type === 'info' ? 'info-circle' : 'bell'
+            }"></i>
+            <span class="font-medium">${message}</span>
+        </div>
+    `;
+    document.body.appendChild(notification);
+    
+    // Animation d'entrée
+    setTimeout(() => {
+        notification.style.transform = 'translateX(0)';
+    }, 10);
+    
+    // Supprimer après 3 secondes
+    setTimeout(() => {
+        notification.style.transform = 'translateX(100%)';
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 300);
+    }, 3000);
+}
+
+        // Mise à jour des données
+        async function updateData() {
+            try {
+                const [consoleResp, trafficResp, alertsResp, insecureResp, statsResp] = await Promise.all([
+                    fetch('/api/console_logs'),
+                    fetch('/api/traffic_logs'),
+                    fetch('/api/alerts'),
+                    fetch('/api/insecure_sites'),
+                    fetch('/api/stats')
+                ]);
+
+                const consoleData = await consoleResp.json();
+                const trafficData = await trafficResp.json();
+                const alertsData = await alertsResp.json();
+                const insecureData = await insecureResp.json();
+                const statsData = await statsResp.json();
+
+                updateConsole(consoleData.logs || []);
+                updateTraffic(trafficData.traffic || []);
+                updateAlerts(alertsData.alerts || []);
+                updateInsecureSites(insecureData.insecure_sites || []);
+                updateStats(statsData);
+                updateMLInfo(statsData.model_info);
+
+            } catch (error) {
+                console.error('Erreur mise à jour:', error);
+            }
+        }
+
+        // Fonctions de contrôle avec notifications
+async function startCapture() {
+    try {
+        const response = await fetch('/api/control/start_capture', { method: 'POST' });
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            showNotification('🎯 Capture réseau démarrée avec succès!', 'success');
+            console.log('Capture démarrée');
+        } else {
+            showNotification('❌ Erreur lors du démarrage de la capture', 'error');
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+        showNotification('❌ Erreur de connexion au serveur', 'error');
+    }
+}
+
+async function stopCapture() {
+    try {
+        const response = await fetch('/api/control/stop_capture', { method: 'POST' });
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            showNotification('🛑 Capture réseau arrêtée', 'warning');
+            console.log('Capture arrêtée');
+        } else {
+            showNotification('❌ Erreur lors de l\'arrêt de la capture', 'error');
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+        showNotification('❌ Erreur de connexion au serveur', 'error');
+    }
+}
+
+async function startDetection() {
+    try {
+        const response = await fetch('/api/control/start_detection', { method: 'POST' });
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            showNotification('🔍 Détection Machine Learning activée!', 'success');
+            console.log('Détection ML activée');
+            
+            // Mettre à jour l'interface après un court délai
+            setTimeout(updateData, 2000);
+        } else {
+            showNotification('❌ Erreur lors de l\'activation de la détection ML', 'error');
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+        showNotification('❌ Erreur de connexion au serveur', 'error');
+    }
+}
+
+async function stopDetection() {
+    try {
+        const response = await fetch('/api/control/stop_detection', { method: 'POST' });
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            showNotification('⏸️ Détection Machine Learning arrêtée', 'warning');
+            console.log('Détection ML arrêtée');
+            
+            // Mettre à jour l'interface
+            setTimeout(updateData, 1000);
+        } else {
+            showNotification('ℹ️ La détection ML n\'était pas active', 'info');
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+        showNotification('❌ Erreur de connexion au serveur', 'error');
+    }
+}
+
+async function trainModel() {
+    try {
+        showNotification('🤖 Entraînement du modèle ML en cours...', 'info');
+        
+        const response = await fetch('/api/control/train_model', { method: 'POST' });
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            const accuracy = (data.accuracy * 100).toFixed(1);
+            showNotification(`✅ Modèle ML entraîné avec succès! (Accuracy: ${accuracy}%)`, 'success');
+            console.log('Modèle entraîné:', data.message);
+            
+            // Mettre à jour les informations ML
+            setTimeout(updateData, 3000);
+        } else {
+            showNotification('❌ Erreur lors de l\'entraînement du modèle', 'error');
+        }
+    } catch (error) {
+        console.error('Erreur entraînement:', error);
+        showNotification('❌ Erreur de connexion lors de l\'entraînement', 'error');
+    }
+}
+
+async function clearLogs() {
+    try {
+        showNotification('🗑️ Effacement des logs en cours...', 'info');
+        
+        const response = await fetch('/api/control/clear_logs', { method: 'POST' });
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            showNotification('✅ Tous les logs et alertes ont été effacés!', 'success');
+            console.log('Logs et alertes effacés');
+            
+            // Forcer la mise à jour immédiate
+            setTimeout(() => {
+                updateData();
+                resetUI();
+            }, 100);
+        } else {
+            showNotification('❌ Erreur lors de l\'effacement des logs', 'error');
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+        showNotification('❌ Erreur de connexion au serveur', 'error');
+    }
+}
+
+// Fonction pour réinitialiser l'interface UI
+function resetUI() {
+    document.getElementById('alerts').innerHTML = '<div class="text-gray-500 text-center py-4">Aucune alerte</div>';
+    document.getElementById('alerts-count').textContent = '0 alertes';
+    document.getElementById('console').innerHTML = '<div class="text-green-400">🗑️ Logs effacés</div>';
+    document.getElementById('console-count').textContent = '0 messages';
+    document.getElementById('traffic').innerHTML = '<div class="text-gray-500 text-center py-4">Aucun trafic</div>';
+    document.getElementById('insecure-sites').innerHTML = '<div class="text-gray-500 text-center py-4">Aucun site non sécurisé</div>';
+    document.getElementById('insecure-count').textContent = '0 sites';
+}
+
+// Fonction de notification améliorée
+function showNotification(message, type = 'info') {
+    // Supprimer les notifications existantes
+    const existingNotifications = document.querySelectorAll('.custom-notification');
+    existingNotifications.forEach(notif => notif.remove());
+    
+    // Définir les icônes et couleurs selon le type
+    const config = {
+        success: { icon: 'check-circle', color: 'bg-green-500', iconColor: 'text-white' },
+        error: { icon: 'exclamation-triangle', color: 'bg-red-500', iconColor: 'text-white' },
+        warning: { icon: 'exclamation-circle', color: 'bg-orange-500', iconColor: 'text-white' },
+        info: { icon: 'info-circle', color: 'bg-blue-500', iconColor: 'text-white' }
+    };
+    
+    const { icon, color, iconColor } = config[type] || config.info;
+    
+    // Créer la notification
+    const notification = document.createElement('div');
+    notification.className = `custom-notification fixed top-4 right-4 p-4 rounded-lg shadow-lg text-white z-50 transform transition-all duration-300 translate-x-full ${color}`;
+    notification.innerHTML = `
+        <div class="flex items-center gap-3">
+            <i class="fas fa-${icon} ${iconColor} text-lg"></i>
+            <span class="font-medium flex-1">${message}</span>
+            <button onclick="this.parentElement.parentElement.remove()" class="text-white hover:text-gray-200 ml-2">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Animation d'entrée
+    setTimeout(() => {
+        notification.classList.remove('translate-x-full');
+    }, 10);
+    
+    // Fermeture automatique après 4 secondes
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.classList.add('translate-x-full');
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 300);
+        }
+    }, 4000);
+    
+    // Fermeture manuelle
+    notification.querySelector('button').addEventListener('click', function() {
+        notification.classList.add('translate-x-full');
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 300);
+    });
+}
+
+        function updateMLInfo(modelInfo) {
+            if (!modelInfo) return;
+            
+            document.getElementById('ml-status').textContent = modelInfo.status;
+            document.getElementById('ml-accuracy').textContent = modelInfo.accuracy ? (modelInfo.accuracy * 100).toFixed(1) + '%' : '0%';
+            document.getElementById('ml-features').textContent = modelInfo.features || '0';
+            document.getElementById('ml-algorithm').textContent = modelInfo.algorithm || 'Aucun';
+            
+            // Couleur du statut
+            const statusElement = document.getElementById('ml-status');
+            if (modelInfo.status === 'Entraîné') {
+                statusElement.className = 'text-2xl font-bold text-green-600';
+            } else {
+                statusElement.className = 'text-2xl font-bold text-red-600';
+            }
+        }
+
+        function updateConsole(logs) {
+            const consoleElement = document.getElementById('console');
+            const countElement = document.getElementById('console-count');
+            
+            countElement.textContent = `${logs.length} messages`;
+            consoleElement.innerHTML = logs.map(log => 
+                `<div class="log-${log.type} mb-1">[${log.timestamp}] ${log.message}</div>`
+            ).join('');
+            consoleElement.scrollTop = consoleElement.scrollHeight;
+        }
+
+        function updateTraffic(traffic) {
+            const trafficElement = document.getElementById('traffic');
+            
+            if (traffic.length === 0) {
+                trafficElement.innerHTML = '<div class="text-gray-500 text-center py-4">Aucun trafic</div>';
+            } else {
+                trafficElement.innerHTML = traffic.map(t => 
+                    `<div class="border-b border-gray-200 py-2 ${t.secure ? '' : 'bg-yellow-50'}">
+                        <div class="flex justify-between">
+                            <span class="font-medium ${t.secure ? 'text-green-600' : 'text-red-600'}">
+                                ${t.secure ? '🔒' : '🔓'} ${t.service}
+                                ${t.is_whitelisted ? ' <span class="text-blue-500 text-xs">(Whitelist)</span>' : ''}
+                            </span>
+                            <span class="text-xs text-gray-500">${t.timestamp}</span>
+                        </div>
+                        <div class="text-sm text-gray-600">${t.process}</div>
+                        <div class="text-xs text-gray-500">→ ${t.destination}</div>
+                    </div>`
+                ).join('');
+            }
+        }
+
+        function updateAlerts(alerts) {
+            const alertsElement = document.getElementById('alerts');
+            const countElement = document.getElementById('alerts-count');
+            
+            countElement.textContent = `${alerts.length} alertes`;
+            
+            if (alerts.length === 0) {
+                alertsElement.innerHTML = '<div class="text-gray-500 text-center py-4">Aucune alerte</div>';
+            } else {
+                alertsElement.innerHTML = alerts.map(alert => {
+                    const mlBadge = alert.ml_model ? 
+                        '<span class="ml-badge text-white text-xs px-2 py-1 rounded ml-2">ML</span>' : '';
+                    return `
+                    <div class="border border-red-200 rounded-lg p-3 mb-2 bg-red-50">
+                        <div class="flex justify-between items-start mb-2">
+                            <div class="flex items-center">
+                                <span class="font-bold text-red-700">🚨 ${alert.attack_type}</span>
+                                ${mlBadge}
+                            </div>
+                            <span class="text-xs text-gray-500">${alert.timestamp}</span>
+                        </div>
+                        <div class="text-sm text-gray-700 mb-1">${alert.process}</div>
+                        <div class="text-sm text-gray-600 mb-2">${alert.src_ip} → ${alert.dst_ip}:${alert.dst_port}</div>
+                        <div class="text-xs text-gray-600 mb-2">${alert.reason}</div>
+                        <div class="flex justify-between items-center">
+                            <span class="px-2 py-1 rounded text-xs font-bold ${
+                                alert.severity === 'CRITICAL' ? 'bg-red-500 text-white' : 
+                                alert.severity === 'HIGH' ? 'bg-orange-500 text-white' : 
+                                'bg-yellow-500 text-white'
+                            }">
+                                ${alert.severity}
+                            </span>
+                            <span class="text-xs font-medium">Confiance: ${(alert.confidence * 100).toFixed(1)}%</span>
+                        </div>
+                    </div>`;
+                }).join('');
+            }
+        }
+
+        function updateInsecureSites(sites) {
+            const insecureElement = document.getElementById('insecure-sites');
+            const countElement = document.getElementById('insecure-count');
+            
+            countElement.textContent = `${sites.length} sites`;
+            
+            if (sites.length === 0) {
+                insecureElement.innerHTML = '<div class="text-gray-500 text-center py-4">Aucun site non sécurisé</div>';
+            } else {
+                insecureElement.innerHTML = sites.map(site => 
+                    `<div class="border border-yellow-200 rounded-lg p-3 mb-2 bg-yellow-50">
+                        <div class="flex justify-between items-start mb-2">
+                            <span class="font-bold text-red-600">🔓 ${site.service}</span>
+                            <span class="text-xs text-gray-500">${site.timestamp}</span>
+                        </div>
+                        <div class="text-sm text-gray-700 mb-1">
+                            <i class="fas fa-desktop"></i> ${site.process}
+                        </div>
+                        <div class="text-sm text-gray-600">
+                            <i class="fas fa-globe"></i> ${site.destination}
+                        </div>
+                        <div class="text-xs text-red-500 mt-1 font-medium">
+                            Risque: ${site.risk_level}
+                        </div>
+                    </div>`
+                ).join('');
+            }
+        }
+
+        function updateStats(stats) {
+            const statsElement = document.getElementById('stats');
+            
+            statsElement.innerHTML = `
+                <div class="bg-white p-4 rounded-lg shadow text-center">
+                    <div class="text-2xl font-bold text-blue-600">${stats.traffic?.total_packets || 0}</div>
+                    <div class="text-gray-600">Paquets</div>
+                </div>
+                <div class="bg-white p-4 rounded-lg shadow text-center">
+                    <div class="text-2xl font-bold text-red-600">${stats.detection?.attacks_detected || 0}</div>
+                    <div class="text-gray-600">Alertes</div>
+                </div>
+                <div class="bg-white p-4 rounded-lg shadow text-center">
+                    <div class="text-2xl font-bold text-green-600">${stats.detection?.detection_rate || 0}%</div>
+                    <div class="text-gray-600">Taux Détection</div>
+                </div>
+                <div class="bg-white p-4 rounded-lg shadow text-center">
+                    <div class="text-xl font-bold ${stats.system_status?.detection_active ? 'text-green-600' : 'text-red-600'}">
+                        ${stats.system_status?.detection_active ? 'ACTIF' : 'INACTIF'}
+                    </div>
+                    <div class="text-gray-600">Détection ML</div>
+                    <div class="text-xs text-gray-500 mt-1">Prédictions: ${stats.detection?.ml_predictions || 0}</div>
+                </div>
+            `;
+        }
+
+        // Polling
+        setInterval(updateData, 2000);
+        updateData();
+    </script>
+</body>
+</html>
