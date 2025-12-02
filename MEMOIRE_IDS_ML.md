@@ -807,28 +807,389 @@ Ces perspectives montrent que le prototype IDS-ML développé dans ce mémoire p
 
 ### Annexe A : Code source des modules principaux
 
-Cette annexe renvoie au code source complet des modules suivants :
+Cette annexe présente des extraits significatifs du code réel du projet, afin d’illustrer la structure des modules et l’implémentation effective des principales fonctionnalités. Pour des raisons de lisibilité, seuls les blocs les plus représentatifs sont reproduits ici ; le lecteur est invité à consulter directement les fichiers référencés pour le détail exhaustif.
 
-- @ids_ml_system/network_capture.py : implémentation de la capture réseau temps réel.  
-- @ids_ml_system/preprocessor.py : prétraitement et extraction des 14 features.  
-- @ids_ml_system/ml_model.py : génération de données, entraînement et prédiction Random Forest.  
-- @ids_ml_system/traffic_detector.py : détection temps réel, génération et gestion des alertes.  
-- @ids_ml_system/flask_app.py : application Flask, initialisation des composants et routes REST.  
-- @templates/index.html : interface web de supervision avec Tailwind CSS.
+#### A.1 Module `ids_ml_system/network_capture.py`
 
-Le lecteur est invité à consulter directement ces fichiers pour obtenir le détail complet des implémentations.
+```python
+# ids_ml_system/network_capture.py
+"""Capture réseau en temps réel"""
+import time
+import random
+import subprocess
+import threading
+import psutil
+from datetime import datetime
+from .logger import Logger
+from .config import CONFIG
+
+class RealNetworkCapture:
+    def __init__(self):
+        self.packets = []
+        self.is_capturing = False
+        self.stats = {'total_packets': 0, 'packets_per_second': 0}
+        self.capture_thread = None
+        self.should_stop = False
+        self.connections_history = set()
+        Logger.add_console_log("✅ Capture réseau initialisée")
+
+    def get_active_connections_detailed(self):
+        """Capture les connexions réseau ACTIVES en temps réel"""
+        try:
+            result = subprocess.run(
+                ['netstat', '-n', '-o'],
+                capture_output=True,
+                text=True,
+                encoding='utf-8',
+                errors='ignore',
+                timeout=5
+            )
+
+            if result.returncode != 0:
+                return []
+
+            connections = []
+
+            for line in result.stdout.split('\n'):
+                if 'ESTABLISHED' in line and 'TCP' in line:
+                    parts = line.strip().split()
+                    if len(parts) >= 5:
+                        try:
+                            local_addr = parts[1]
+                            remote_addr = parts[2]
+                            pid = parts[4] if len(parts) > 4 else 'N/A'
+
+                            local_ip, local_port = local_addr.rsplit(':', 1)
+                            remote_ip, remote_port = remote_addr.rsplit(':', 1)
+
+                            if remote_ip in ['127.0.0.1', 'localhost']:
+                                continue
+
+                            conn_id = f"{local_ip}:{local_port}-{remote_ip}:{remote_port}"
+
+                            if conn_id not in self.connections_history:
+                                self.connections_history.add(conn_id)
+                                process_name = self.get_process_name(pid)
+                                packet_size = random.randint(200, 1500)
+                                ttl = random.randint(30, 255)
+
+                                connections.append({
+                                    'timestamp': time.time(),
+                                    'src_ip': local_ip,
+                                    'dst_ip': remote_ip,
+                                    'src_port': int(local_port),
+                                    'dst_port': int(remote_port),
+                                    'protocol': 6,
+                                    'packet_size': packet_size,
+                                    'ttl': ttl,
+                                    'process': process_name,
+                                    'pid': pid,
+                                    'status': 'ESTABLISHED',
+                                    'real_traffic': True,
+                                    'connection_new': True
+                                })
+                        except (ValueError, IndexError):
+                            continue
+
+            return connections
+
+        except Exception as e:
+            Logger.add_console_log(f"❌ Erreur capture connexions: {e}", "error")
+            return []
+```
+
+#### A.2 Module `ids_ml_system/preprocessor.py`
+
+```python
+# ids_ml_system/preprocessor.py
+"""Préprocessing des données pour le ML"""
+import numpy as np
+from datetime import datetime
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from .logger import Logger
+from .config import CONFIG
+
+class MLDataPreprocessor:
+    def __init__(self):
+        self.scaler = StandardScaler()
+        self.label_encoder = LabelEncoder()
+        self.feature_names = [
+            'packet_size', 'protocol', 'src_port', 'dst_port', 'ttl',
+            'hour', 'minute', 'src_ip_encoded', 'dst_ip_encoded',
+            'is_common_port', 'is_private_ip', 'packet_size_std',
+            'is_whitelisted_process', 'is_suspicious_port'
+        ]
+        Logger.add_console_log("✅ Preprocesseur ML initialisé")
+
+    def prepare_features(self, packet_data):
+        """Prépare les features pour le modèle ML"""
+        try:
+            packet_size = packet_data.get('packet_size', 0)
+            protocol = packet_data.get('protocol', 0)
+            src_port = packet_data.get('src_port', 0)
+            dst_port = packet_data.get('dst_port', 0)
+            ttl = packet_data.get('ttl', 64)
+
+            now = datetime.now()
+            hour = now.hour
+            minute = now.minute
+
+            src_ip_encoded = self.encode_ip(packet_data.get('src_ip', '0.0.0.0'))
+            dst_ip_encoded = self.encode_ip(packet_data.get('dst_ip', '0.0.0.0'))
+
+            is_common_port = 1 if dst_port in [80, 443, 53, 22, 21, 25, 110, 143] else 0
+            is_private_ip = 1 if self.is_private_ip(packet_data.get('src_ip', '')) else 0
+            packet_size_std = abs(packet_size - 1000) / 500
+
+            process_name = packet_data.get('process', '').lower()
+            is_whitelisted_process = 1 if any(
+                whitelist.lower() in process_name for whitelist in CONFIG['WHITELIST_PROCESSES']
+            ) else 0
+            is_suspicious_port = 1 if dst_port in CONFIG['SUSPICIOUS_PORTS'] else 0
+
+            features = [
+                packet_size, protocol, src_port, dst_port, ttl,
+                hour, minute, src_ip_encoded, dst_ip_encoded,
+                is_common_port, is_private_ip, packet_size_std,
+                is_whitelisted_process, is_suspicious_port
+            ]
+
+            return np.array(features).reshape(1, -1)
+
+        except Exception as e:
+            Logger.add_console_log(f"❌ Erreur préprocessing: {e}", "error")
+            return np.array([0] * 14).reshape(1, -1)
+```
+
+#### A.3 Module `ids_ml_system/ml_model.py`
+
+```python
+# ids_ml_system/ml_model.py
+"""Modèle de Machine Learning"""
+import os
+import random
+import joblib
+import numpy as np
+from datetime import datetime
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+from .preprocessor import MLDataPreprocessor
+from .logger import Logger
+from .config import CONFIG
+
+class MLTrafficClassifier:
+    def __init__(self):
+        self.model = None
+        self.is_trained = False
+        self.accuracy = 0.0
+        self.preprocessor = MLDataPreprocessor()
+        Logger.add_console_log("✅ Classificateur ML initialisé")
+
+    def generate_training_data(self, num_samples=2000):
+        """Génère des données d'entraînement réalistes"""
+        Logger.add_console_log("🤖 Génération des données d'entraînement...")
+        features_list = []
+        labels_list = []
+        for i in range(num_samples):
+            # 85% de trafic normal, 15% de trafic malveillant
+            if random.random() < 0.85:
+                # Trafic normal
+                packet_size = random.randint(500, 1500)
+                dst_port = random.choice([443, 80, 53, 993, 995])
+                protocol = 6
+                ttl = random.randint(50, 128)
+                src_port = random.randint(10000, 60000)
+                is_private_ip = random.choice([0, 1])
+                is_whitelisted_process = random.choice([0, 1])
+                is_suspicious_port = 0
+                label = 0
+            else:
+                # Trafic malveillant
+                attack_type = random.choice(['port_scan', 'ddos', 'exploit', 'suspicious'])
+                # ... (logique détaillée dans le code complet)
+                label = 1
+            # Construction du vecteur de features puis ajout à features_list / labels_list
+        Logger.add_console_log(f"✅ Données d'entraînement générées: {len(features_list)} échantillons")
+        return np.array(features_list), np.array(labels_list)
+
+    def train_model(self):
+        """Entraîne le modèle Random Forest"""
+        try:
+            Logger.add_console_log("🎯 Début de l'entraînement du modèle ML...")
+            X, y = self.generate_training_data(2000)
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.2, random_state=42, stratify=y
+            )
+            self.preprocessor.fit_scaler(X_train)
+            X_train_scaled = self.preprocessor.scaler.transform(X_train)
+            X_test_scaled = self.preprocessor.scaler.transform(X_test)
+            self.model = RandomForestClassifier(
+                n_estimators=100,
+                max_depth=20,
+                min_samples_split=5,
+                min_samples_leaf=2,
+                random_state=42,
+                n_jobs=-1
+            )
+            self.model.fit(X_train_scaled, y_train)
+            y_pred = self.model.predict(X_test_scaled)
+            self.accuracy = accuracy_score(y_test, y_pred)
+            self.is_trained = True
+            Logger.add_console_log(f"✅ Modèle Random Forest entraîné avec succès!", "success")
+            Logger.add_console_log(f"📊 Accuracy: {self.accuracy:.2%}", "success")
+            self.save_model()
+            return self.accuracy
+        except Exception as e:
+            Logger.add_console_log(f"❌ Erreur entraînement modèle: {e}", "error")
+            return 0.0
+```
+
+#### A.4 Module `ids_ml_system/traffic_detector.py`
+
+```python
+# ids_ml_system/traffic_detector.py
+"""Détecteur de trafic avec ML"""
+import time
+from datetime import datetime
+from collections import deque
+import numpy as np
+import threading
+from .logger import Logger
+from .config import CONFIG
+
+class MLTrafficDetector:
+    def __init__(self, traffic_collector, ml_classifier):
+        self.traffic_collector = traffic_collector
+        self.ml_classifier = ml_classifier
+        self.alerts = deque(maxlen=200)
+        self.is_monitoring = False
+        self.monitor_thread = None
+        self.should_stop_monitoring = False
+        self.stats = {
+            'attacks_detected': 0,
+            'total_processed': 0,
+            'ml_predictions': 0
+        }
+        self.recent_alerts = {}
+        self.alert_count_minute = 0
+        self.last_alert_reset = time.time()
+        Logger.add_console_log("✅ Détecteur ML initialisé")
+
+    def analyze_traffic(self):
+        """Analyse le trafic avec le modèle ML"""
+        while self.is_monitoring and not self.should_stop_monitoring:
+            try:
+                packets = self.traffic_collector.get_recent_packets(30)
+                for packet in packets:
+                    if self.should_stop_monitoring:
+                        break
+                    self.stats['total_processed'] += 1
+                    # Détection HTTP non sécurisé puis détection ML avec seuil de confiance
+            except Exception as e:
+                Logger.add_console_log(f"❌ Erreur analyse trafic: {e}", "error")
+                time.sleep(3)
+```
+
+#### A.5 Module `ids_ml_system/flask_app.py` et template `templates/index.html`
+
+```python
+# ids_ml_system/flask_app.py
+"""Application Flask principale"""
+import os
+import traceback
+from flask import Flask, render_template, jsonify, request
+from datetime import datetime
+from .config import console_logs, traffic_logs, alert_logs, insecure_sites_logs, CONFIG
+from .logger import Logger
+from .ml_model import MLTrafficClassifier
+from .network_capture import RealNetworkCapture
+from .traffic_detector import MLTrafficDetector
+
+class IDSFlaskApp:
+    def __init__(self, template_folder=None):
+        # Initialisation du dossier templates et de l'application Flask
+        self.app = Flask(__name__, template_folder=template_folder or 'templates')
+        self.setup_components()
+        self.setup_routes()
+
+    def setup_components(self):
+        """Initialise tous les composants"""
+        self.ml_classifier = MLTrafficClassifier()
+        self.traffic_collector = RealNetworkCapture()
+        self.detector = MLTrafficDetector(self.traffic_collector, self.ml_classifier)
+        # ...
+
+    def setup_routes(self):
+        """Configure toutes les routes Flask"""
+        @self.app.route('/')
+        def index():
+            return render_template('index.html')
+
+        @self.app.route('/api/stats')
+        def api_stats():
+            traffic_stats = self.traffic_collector.get_stats()
+            detection_stats = self.detector.get_stats()
+            model_info = self.ml_classifier.get_model_info()
+            return jsonify({
+                'traffic': traffic_stats,
+                'detection': detection_stats,
+                'model_info': model_info,
+            })
+        # ... (autres routes d'API et de contrôle)
+```
+
+```html
+<!-- Extrait de templates/index.html -->
+<div class="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6">
+    <button onclick="startCapture()" class="bg-green-500 hover:bg-green-600 text-white p-3 rounded-lg flex items-center justify-center gap-2 transition-all">
+        <i class="fas fa-play"></i> Capture
+    </button>
+    <button onclick="stopCapture()" class="bg-red-500 hover:bg-red-600 text-white p-3 rounded-lg flex items-center justify-center gap-2 transition-all">
+        <i class="fas fa-stop"></i> Arrêter
+    </button>
+    <button onclick="startDetection()" class="bg-blue-500 hover:bg-blue-600 text-white p-3 rounded-lg flex items-center justify-center gap-2 transition-all">
+        <i class="fas fa-brain"></i> Détection ML
+    </button>
+    <button onclick="stopDetection()" class="bg-orange-500 hover:bg-orange-600 text-white p-3 rounded-lg flex items-center justify-center gap-2 transition-all">
+        <i class="fas fa-pause"></i> Arrêter ML
+    </button>
+    <button onclick="trainModel()" class="bg-purple-500 hover:bg-purple-600 text-white p-3 rounded-lg flex items-center justify-center gap-2 transition-all">
+        <i class="fas fa-robot"></i> Entraîner ML
+    </button>
+    <button onclick="clearLogs()" class="bg-gray-500 hover:bg-gray-600 text-white p-3 rounded-lg flex items-center justify-center gap-2 transition-all">
+        <i class="fas fa-trash"></i> Effacer
+    </button>
+</div>
+```
 
 ### Annexe B : Captures d’écran de l’interface
 
-Cette annexe décrit textuellement plusieurs captures d’écran illustrant l’interface IDS-ML.
+Cette annexe illustre l’interface réelle de l’IDS-ML au travers de plusieurs captures d’écran. Les fichiers d’images correspondants peuvent être enregistrés, par exemple, dans un répertoire `captures/` du projet, puis référencés dans ce mémoire comme indiqué ci-dessous.
 
-- **Capture 1** : Vue globale du tableau de bord immédiatement après le démarrage du système. La console affiche un message « Système IDS ML démarré... », les sections « Traffic Réseau », « Alertes de Sécurité » et « Sites Non Sécurisés » indiquent l’absence de données. Les tuiles de statistiques affichent 0 paquets, 0 alertes, un taux de détection de 0 % et un état de détection ML « INACTIF ».
+#### B.1 Tableau de bord au démarrage
 
-- **Capture 2** : Tableau de bord après démarrage de la capture et navigation web vers plusieurs sites HTTPS. La section « Traffic Réseau » présente une liste de connexions sécurisées (icône de cadenas fermé) avec le nom du processus navigateur, les destinations et l’horodatage. La console montre des messages d’information sur les nouvelles connexions et les statistiques de trafic.
+![Capture 1 – Tableau de bord initial](captures/idsml_dashboard_initial.png)
 
-- **Capture 3** : Tableau de bord après activation de la détection ML et génération de quelques alertes. La section « Alertes de Sécurité » affiche des cartes rouges avec des icônes d’alerte, le type d’attaque (par exemple `SUSPICIOUS_PORT_ACCESS`), la sévérité (CRITICAL ou HIGH) et la confiance associée. La tuile de statistiques « Alertes » indique un nombre non nul d’alertes, et le taux de détection est mis à jour.
+Figure B.1 – Vue globale du tableau de bord immédiatement après le démarrage du système. La console affiche un message « Système IDS ML démarré... », les sections « Traffic Réseau », « Alertes de Sécurité » et « Sites Non Sécurisés » indiquent l’absence de données. Les tuiles de statistiques affichent 0 paquets, 0 alertes, un taux de détection de 0 % et un état de détection ML « INACTIF ».
 
-- **Capture 4** : Vue de la section « Sites Non Sécurisés » après détection de trafic HTTP non chiffré. Chaque entrée affiche le service HTTP, le processus à l’origine de la connexion, la destination et un niveau de risque, sur fond jaune.
+#### B.2 Tableau de bord avec capture réseau active
+
+![Capture 2 – Trafic réseau chiffré](captures/idsml_dashboard_https_traffic.png)
+
+Figure B.2 – Tableau de bord après démarrage de la capture et navigation web vers plusieurs sites HTTPS. La section « Traffic Réseau » présente une liste de connexions sécurisées (icône de cadenas fermé) avec le nom du processus navigateur, les destinations et l’horodatage. La console montre des messages d’information sur les nouvelles connexions et les statistiques de trafic.
+
+#### B.3 Tableau de bord avec alertes ML
+
+![Capture 3 – Alertes générées par le modèle ML](captures/idsml_dashboard_alerts.png)
+
+Figure B.3 – Tableau de bord après activation de la détection ML et génération de quelques alertes. La section « Alertes de Sécurité » affiche des cartes rouges avec des icônes d’alerte, le type d’attaque (par exemple `SUSPICIOUS_PORT_ACCESS`), la sévérité (CRITICAL ou HIGH) et la confiance associée. La tuile de statistiques « Alertes » indique un nombre non nul d’alertes, et le taux de détection est mis à jour.
+
+#### B.4 Liste des sites non sécurisés
+
+![Capture 4 – Sites non sécurisés détectés](captures/idsml_insecure_sites.png)
+
+Figure B.4 – Vue de la section « Sites Non Sécurisés » après détection de trafic HTTP non chiffré. Chaque entrée affiche le service HTTP, le processus à l’origine de la connexion, la destination et un niveau de risque, sur fond jaune.
 
 ### Annexe C : Guide d’installation
 
